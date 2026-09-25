@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Посещаемость</title>
+<meta name="theme-color" content="#EDF0F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F141D" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Посещаемость">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EDF0F3; --paper:#FFFFFF; --ink:#18233D; --muted:#5E6A80; --line:#D5DBE3;
+  --present:#17804F; --present-bg:#E2F2E9; --absent:#B8392F; --absent-bg:#FBE9E7;
+  --accent:#2B4EA2; --accent-ink:#FFFFFF; --shadow:0 1px 0 rgba(24,35,61,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F141D; --paper:#171F2D; --ink:#E6EAF2; --muted:#97A2B6; --line:#2A3447;
+    --present:#4CC38A; --present-bg:#16301F; --absent:#F0877C; --absent-bg:#3A1E1D;
+    --accent:#8FA8F0; --accent-ink:#0F141D; --shadow:none; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F141D; --paper:#171F2D; --ink:#E6EAF2; --muted:#97A2B6; --line:#2A3447;
+  --present:#4CC38A; --present-bg:#16301F; --absent:#F0877C; --absent-bg:#3A1E1D;
+  --accent:#8FA8F0; --accent-ink:#0F141D; --shadow:none; color-scheme:dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1040px;margin:0 auto;padding:16px 16px 120px}
+
+/* top */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.brand{font-weight:700;font-size:1.05rem;letter-spacing:-.01em}
+.sync{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--present);display:inline-block}
+.sync.saving i{background:#D9A21B}
+.sync.error i,.sync.local i{background:var(--absent)}
+
+.groups{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px;scrollbar-width:none}
+.groups::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:8px 14px;font-weight:500;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.add{color:var(--accent);border-style:dashed}
+
+/* layout */
+.cols{display:grid;gap:16px}
+@media (min-width:860px){
+  .cols{grid-template-columns:minmax(0,1fr) 360px;align-items:start}
+  .side{position:sticky;top:calc(16px + env(safe-area-inset-top,0px))}
+  .bar{display:none!important}
+}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+
+/* day */
+.day{padding:16px 16px 12px}
+.dayrow{display:flex;align-items:center;gap:8px}
+.nav{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;flex:none}
+.nav svg{width:18px;height:18px}
+.datepick{position:relative;flex:1;min-width:0;text-align:center}
+.datepick .d1{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.datepick .d2{color:var(--muted);font-size:.9rem}
+.datepick input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0}
+.today{display:block;margin:6px auto 0;border:0;background:none;color:var(--accent);font-size:.85rem;font-weight:500;padding:2px 6px}
+.groupname{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.groupname h2{margin:0;font-size:1rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link{border:0;background:none;color:var(--accent);font-weight:500;padding:4px 2px;white-space:nowrap}
+
+/* tally */
+.tally{display:flex;align-items:center;gap:14px;margin-top:12px}
+.count{font-size:1.9rem;font-weight:700;letter-spacing:-.03em;line-height:1;white-space:nowrap}
+.count small{font-size:1rem;color:var(--muted);font-weight:500;letter-spacing:0}
+.dots{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+.dots span{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--line);transition:background .15s,border-color .15s}
+.dots span.on{background:var(--present);border-color:var(--present)}
+.bulk{display:flex;gap:8px;margin-top:12px}
+.btn{border:1px solid var(--line);background:transparent;border-radius:10px;padding:8px 12px;font-weight:500;font-size:.9rem}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.danger{color:var(--absent);border-color:transparent;padding-left:0}
+
+/* roll */
+.roll{list-style:none;margin:12px 0 0;padding:0}
+.roll li+li{border-top:1px solid var(--line)}
+.row{width:100%;display:flex;align-items:center;gap:14px;padding:13px 16px;background:none;border:0;text-align:left;min-height:56px}
+.box{width:28px;height:28px;flex:none;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;transition:background .15s,border-color .15s}
+.box svg{width:16px;height:16px;opacity:0;transform:scale(.6);transition:opacity .15s,transform .15s;color:#fff}
+.row[aria-checked="true"] .box{background:var(--present);border-color:var(--present)}
+.row[aria-checked="true"] .box svg{opacity:1;transform:none}
+.row .num{color:var(--muted);font-variant-numeric:tabular-nums;width:1.6em;text-align:right;font-size:.85rem;flex:none}
+.row .nm{flex:1;min-width:0}
+.row .tag{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.row[aria-checked="false"] .nm{color:var(--muted)}
+@media (hover:hover){.row:hover{background:color-mix(in srgb,var(--bg) 60%,transparent)}}
+
+.empty{padding:28px 20px;text-align:center}
+.empty p{margin:0 0 14px;color:var(--muted)}
+
+/* side */
+.side{display:grid;gap:16px}
+.report{padding:16px}
+.report h3,.hist h3{margin:0 0 10px;font-size:1rem;font-weight:600}
+.report textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:.92rem;line-height:1.5}
+.opts{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 12px;font-size:.88rem;color:var(--muted)}
+.opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.opts input{accent-color:var(--accent);width:16px;height:16px}
+.actions{display:flex;gap:8px}
+.actions .btn.primary{flex:1;padding:11px}
+.hist{padding:16px}
+.hist ul{list-style:none;margin:0;padding:0;max-height:320px;overflow:auto}
+.hist li button{width:100%;display:flex;justify-content:space-between;gap:10px;border:0;background:none;padding:9px 4px;border-radius:8px;text-align:left}
+.hist li button[aria-current="true"]{background:var(--bg);font-weight:600}
+.hist li span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.hist .none{color:var(--muted);font-size:.9rem;margin:0}
+
+/* bottom bar (mobile) */
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;z-index:5}
+.bar .btn.primary{flex:1;padding:12px;font-size:1rem}
+.bar .meta{font-size:.85rem;color:var(--muted);white-space:nowrap}
+
+/* dialog */
+dialog{border:0;border-radius:16px;padding:0;width:min(520px,calc(100% - 24px));background:var(--paper);color:var(--ink);max-height:calc(100% - 40px)}
+dialog::backdrop{background:rgba(10,15,25,.45)}
+.dlg{padding:20px;display:grid;gap:14px}
+.dlg h3{margin:0;font-size:1.15rem}
+.field{display:grid;gap:6px}
+.field span{font-size:.88rem;font-weight:500}
+.field small{color:var(--muted);font-size:.8rem}
+.field input,.field textarea{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px;width:100%}
+.field textarea{min-height:220px;resize:vertical;line-height:1.5}
+.dlg .foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.dlg .foot .r{display:flex;gap:8px;margin-left:auto}
+
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:20;max-width:calc(100% - 32px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.loading{padding:60px 20px;text-align:center;color:var(--muted)}
+.auth{padding:32px 24px;text-align:center;max-width:440px;margin:24px auto 0}
+.auth h1{margin:0 0 8px;font-size:1.4rem;letter-spacing:-.02em}
+.auth p{margin:0 0 20px;color:var(--muted)}
+.auth .btn.primary{padding:12px 18px;font-size:1rem}
+.auth .err{color:var(--absent);font-size:.9rem;margin:14px 0 0}
+.foot-note{margin-top:20px;font-size:.85rem;color:var(--muted);text-align:center}
+.foot-note button{border:0;background:none;color:var(--accent);font-size:inherit;padding:2px 4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">Посещаемость</div>
+    <div class="sync" id="sync"><i></i><span>Подключение…</span></div>
+  </div>
+  <nav class="groups" id="groups" aria-label="Группы"></nav>
+  <div id="app"><div class="loading">Загрузка данных…</div></div>
+  <div class="foot-note" id="footNote"></div>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <span class="meta" id="barMeta"></span>
+  <button class="btn primary" id="barCopy">Скопировать отчёт</button>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" method="dialog" id="dlgForm">
+    <h3 id="dlgTitle">Новая группа</h3>
+    <label class="field"><span>Название группы</span>
+      <input id="fName" required maxlength="80" placeholder="Например, 9 класс — олимпиадная химия" autocomplete="off">
+    </label>
+    <label class="field"><span>Ученики</span>
+      <textarea id="fStudents" placeholder="Иванов Иван&#10;Петрова Мария&#10;…"></textarea>
+      <small>По одному в строке. Можно вставить столбец из Excel или список с номерами — номера уберутся сами.</small>
+    </label>
+    <div class="foot">
+      <button type="button" class="btn danger" id="fDelete" hidden>Удалить группу</button>
+      <button type="button" class="btn" id="fSort">По алфавиту</button>
+      <div class="r">
+        <button type="button" class="btn" id="fCancel">Отмена</button>
+        <button type="submit" class="btn primary" id="fSave">Сохранить</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+import { firebaseConfig } from "./config.js";
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ICON_CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
+
+/* ---------- prefs (per device) ---------- */
+function lsGet(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+const prefs = Object.assign({ groupName:false, lines:false, counts:false }, lsGet('att-prefs', {}));
+
+/* ---------- dates ---------- */
+function isoToday(){ const d = new Date(); return iso(d); }
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function parseIso(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function shift(s, n){ const d = parseIso(s); d.setDate(d.getDate()+n); return iso(d); }
+function dmy(s){ const [y,m,d] = s.split('-'); return d+'.'+m+'.'+y; }
+const fmtLong = new Intl.DateTimeFormat('ru-RU', {day:'numeric', month:'long'});
+const fmtWd = new Intl.DateTimeFormat('ru-RU', {weekday:'long', year:'numeric'});
+
+/* ---------- state ---------- */
+const state = {
+  ready:false, groups:[], sessions:{}, // sessions[gid] = {date: session}
+  gid: lsGet('att-group', null), date: isoToday(), editing:null
+};
+
+/* ---------- storage backends ---------- */
+let backend = null;
+const pending = new Map(), timers = new Map(), inflight = new Set();
+
+const FB_VER = "10.12.2";
+let fb = null; // loaded firebase modules
+let unacked = 0;
+function makeFirebaseBackend(db, uid){
+  const F = fb.fs;
+  const ref = path => F.doc(db, "users/" + uid + "/" + path);
+  const col = path => F.collection(db, "users/" + uid + "/" + path);
+  const ack = p => { unacked++; p.then(() => { unacked--; if(!unacked && !pending.size && !inflight.size) idleStatus(); }, err => { unacked--; failStatus(err); }); };
+  return {
+    kind:"firebase",
+    subGroups(cb){ return F.onSnapshot(col("groups"), s => cb(s.docs.map(d => Object.assign({id:d.id}, d.data()))), onDbError); },
+    subSessions(gid, cb){ return F.onSnapshot(col("groups/" + gid + "/sessions"), s => cb(s.docs.map(d => d.data())), onDbError); },
+    // the write lands in the offline cache at once; the server acknowledgement is tracked separately
+    async write(path, data){ ack(data === null ? F.deleteDoc(ref(path)) : F.setDoc(ref(path), data)); },
+    async listSessions(gid){ const s = await F.getDocs(col("groups/" + gid + "/sessions")); return s.docs.map(d => d.id); }
+  };
+}
+function makeLocalBackend(){
+  const KEY = 'att-local-data';
+  let data = lsGet(KEY, {groups:{}, sessions:{}});
+  const gl = new Set(), sl = new Map();
+  const emitG = () => gl.forEach(cb => cb(Object.entries(data.groups).map(([id,g]) => Object.assign({id}, g))));
+  const emitS = gid => (sl.get(gid)||new Set()).forEach(cb => cb(Object.values(data.sessions[gid]||{})));
+  return {
+    kind:'local',
+    subGroups(cb){ gl.add(cb); setTimeout(emitG); return () => gl.delete(cb); },
+    subSessions(gid, cb){ if(!sl.has(gid)) sl.set(gid, new Set()); sl.get(gid).add(cb); setTimeout(() => emitS(gid)); return () => sl.get(gid).delete(cb); },
+    async write(path, val){
+      const p = path.split('/');
+      if(p.length === 2){ if(val === null) delete data.groups[p[1]]; else data.groups[p[1]] = val; lsSet(KEY, data); emitG(); }
+      else { const gid = p[1], date = p[3]; data.sessions[gid] = data.sessions[gid] || {}; if(val === null) delete data.sessions[gid][date]; else data.sessions[gid][date] = val; lsSet(KEY, data); emitS(gid); }
+    },
+    async listSessions(gid){ return Object.keys(data.sessions[gid]||{}); }
+  };
+}
+function onDbError(e){ console.warn(e); setSync('error', e && e.code === 'permission-denied' ? 'Нет доступа к базе — проверьте правила Firestore' : 'Нет связи с базой — обновите страницу'); }
+function failStatus(err){ console.warn(err); setSync('error', err && err.code === 'permission-denied' ? 'Нет доступа к базе — проверьте правила Firestore' : 'Не сохранилось — проверьте интернет'); }
+
+function setSync(kind, text){
+  const el = $('#sync'); el.className = 'sync ' + kind;
+  el.querySelector('span').textContent = text || ({ok:'Синхронизировано', saving:'Сохранение…', local:'Только на этом устройстве'}[kind] || '');
+}
+function idleStatus(){
+  if(!backend) return;
+  if(backend.kind === 'local') return setSync('local');
+  if(!navigator.onLine) return setSync('saving', 'Нет сети — отметки сохранятся и отправятся позже');
+  setSync(unacked ? 'saving' : 'ok');
+}
+window.addEventListener('online', idleStatus); window.addEventListener('offline', idleStatus);
+
+function queueWrite(path, data, delay){
+  pending.set(path, data);
+  clearTimeout(timers.get(path));
+  setSync('saving');
+  timers.set(path, setTimeout(() => flush(path), delay == null ? 400 : delay));
+}
+async function flush(path){
+  if(inflight.has(path) || !pending.has(path)) return;
+  const data = pending.get(path); pending.delete(path); inflight.add(path);
+  try{ await backend.write(path, data); }
+  catch(e){
+    if(e && e.code === 'unavailable'){ await new Promise(r => setTimeout(r, 600 + Math.random()*800)); try{ await backend.write(path, data); }catch(e2){ fail(e2); } }
+    else fail(e);
+  }
+  inflight.delete(path);
+  if(pending.has(path)) flush(path);
+  else if(!pending.size && !inflight.size) idleStatus();
+  function fail(err){ failStatus(err); }
+}
+
+function flushAll(){ for(const p of [...pending.keys()]){ clearTimeout(timers.get(p)); flush(p); } }
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') flushAll(); });
+window.addEventListener('pagehide', flushAll);
+
+/* ---------- subscriptions ---------- */
+let unsubSessions = null, subGid = null;
+function watchSessions(){
+  if(subGid === state.gid) return;
+  if(unsubSessions) unsubSessions();
+  subGid = state.gid; unsubSessions = null;
+  if(!state.gid) return;
+  const gid = state.gid;
+  unsubSessions = backend.subSessions(gid, list => {
+    const map = {};
+    list.forEach(s => { if(s && s.date) map[s.date] = s; });
+    // keep local edits that haven't reached the store yet
+    for(const [path, val] of pending){ const p = path.split('/'); if(p[1] === gid && p.length === 4){ if(val === null) delete map[p[3]]; else map[p[3]] = val; } }
+    state.sessions[gid] = map; render();
+  });
+}
+
+let unsubGroups = null;
+function attach(be){
+  backend = be; idleStatus();
+  unsubGroups = backend.subGroups(list => {
+    list = list.filter(g => g && typeof g.name === 'string');
+    for(const [path, val] of pending){ const p = path.split('/'); if(p.length === 2){ const i = list.findIndex(g => g.id === p[1]); if(val === null){ if(i > -1) list.splice(i,1); } else { const g = Object.assign({id:p[1]}, val); if(i > -1) list[i] = g; else list.push(g); } } }
+    list.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+    state.groups = list; state.ready = true;
+    if(!list.find(g => g.id === state.gid)) state.gid = list.length ? list[0].id : null;
+    watchSessions(); render();
+  });
+}
+function detach(){
+  if(unsubGroups) unsubGroups(); if(unsubSessions) unsubSessions();
+  unsubGroups = unsubSessions = null; subGid = null; backend = null;
+  state.groups = []; state.sessions = {}; state.ready = false;
+}
+function showSignIn(errText){
+  $('#groups').innerHTML = ''; $('#bar').hidden = true; $('#footNote').textContent = '';
+  setSync('local', 'Не выполнен вход');
+  $('#app').innerHTML = '<div class="card auth"><h1>Учёт посещаемости</h1><p>Войдите через Google, чтобы группы и отметки были одинаковыми на телефоне и компьютере.</p><button class="btn primary" id="signIn">Войти через Google</button>' + (errText ? '<p class="err">' + esc(errText) + '</p>' : '') + '</div>';
+}
+async function signIn(){
+  const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } = fb.auth;
+  const auth = getAuth(); const provider = new GoogleAuthProvider();
+  try{ await signInWithPopup(auth, provider); }
+  catch(e){
+    if(e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment' || e.code === 'auth/cancelled-popup-request')){
+      try{ await signInWithRedirect(auth, provider); return; }catch(e2){ e = e2; }
+    }
+    if(e && e.code === 'auth/popup-closed-by-user') return;
+    showSignIn(e && e.code === 'auth/unauthorized-domain' ? 'Этот адрес не добавлен в Firebase → Authentication → Settings → Authorized domains.' : 'Не удалось войти (' + ((e && e.code) || 'ошибка') + ').');
+  }
+}
+function renderFoot(user){
+  const f = $('#footNote');
+  if(!user){ f.innerHTML = 'Синхронизация не настроена: данные хранятся только на этом устройстве. Как включить — в README репозитория.'; return; }
+  f.innerHTML = 'Вы вошли как ' + esc(user.email || user.displayName || 'пользователь') + ' <button id="signOut">Выйти</button>';
+}
+
+async function start(){
+  const cfgOk = firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId;
+  if(!cfgOk){ attach(makeLocalBackend()); renderFoot(null); return; }
+  try{
+    const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
+    const [app, auth, fs] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')]);
+    fb = { app, auth, fs };
+  }catch(e){
+    console.warn(e); $('#app').innerHTML = '<div class="card empty"><p>Не удалось загрузить Firebase. Проверьте интернет и обновите страницу.</p></div>'; return;
+  }
+  const fbApp = fb.app.initializeApp(firebaseConfig);
+  let db;
+  try{ db = fb.fs.initializeFirestore(fbApp, { localCache: fb.fs.persistentLocalCache({ tabManager: fb.fs.persistentMultipleTabManager() }) }); }
+  catch(e){ db = fb.fs.getFirestore(fbApp); }
+  const auth = fb.auth.getAuth(fbApp);
+  fb.auth.getRedirectResult(auth).catch(e => showSignIn('Не удалось войти (' + (e.code || 'ошибка') + ').'));
+  fb.auth.onAuthStateChanged(auth, user => {
+    detach();
+    if(!user){ showSignIn(); return; }
+    $('#app').innerHTML = '<div class="loading">Загрузка данных…</div>';
+    renderFoot(user);
+    attach(makeFirebaseBackend(db, user.uid));
+  });
+}
+
+/* ---------- derived ---------- */
+const curGroup = () => state.groups.find(g => g.id === state.gid) || null;
+const curSession = () => (state.sessions[state.gid] || {})[state.date] || null;
+function rollFor(group, session){
+  const students = group.students || [];
+  const present = new Set(session ? session.present : []);
+  const extras = [...present].filter(n => !students.includes(n));
+  return { students, present, extras };
+}
+function reportText(){
+  const g = curGroup(); if(!g) return '';
+  const { students, present, extras } = rollFor(g, curSession());
+  const pres = students.filter(n => present.has(n)).concat(extras);
+  const abs = students.filter(n => !present.has(n));
+  const head = dmy(state.date) + (prefs.groupName ? ', ' + g.name : '');
+  const pl = 'Присутствовали' + (prefs.counts ? ' (' + pres.length + ')' : '');
+  const al = 'Отсутствовали' + (prefs.counts ? ' (' + abs.length + ')' : '');
+  if(prefs.lines){
+    return head + '\n\n' + pl + ':\n' + (pres.length ? pres.map(n => '— ' + n).join('\n') : '—') + '\n\n' + al + ':\n' + (abs.length ? abs.map(n => '— ' + n).join('\n') : '—');
+  }
+  return head + ', ' + pl + ': ' + (pres.join(', ') || '—') + '. ' + al + ': ' + (abs.join(', ') || '—') + '.';
+}
+
+/* ---------- actions ---------- */
+function setPresent(names){
+  const g = curGroup(); if(!g) return;
+  const path = 'groups/' + g.id + '/sessions/' + state.date;
+  state.sessions[g.id] = state.sessions[g.id] || {};
+  if(!names.length){ delete state.sessions[g.id][state.date]; queueWrite(path, null); }
+  else { const s = { date: state.date, present: names, roster: (g.students||[]).slice(), updatedAt: Date.now() }; state.sessions[g.id][state.date] = s; queueWrite(path, s); }
+  render();
+}
+function toggle(name){
+  const s = curSession(); const cur = s ? s.present.slice() : [];
+  const i = cur.indexOf(name); if(i > -1) cur.splice(i,1); else cur.push(name);
+  setPresent(cur);
+}
+function selectGroup(id){ state.gid = id; lsSet('att-group', id); watchSessions(); render(); }
+function setDate(d){ if(d){ state.date = d; render(); } }
+
+function parseList(text){
+  const seen = new Set(), out = [];
+  text.split(/\r?\n/).forEach(line => {
+    let n = line.replace(/\t+/g, ' ').replace(/^\s*\d+\s*[.)]?\s+/, '').replace(/\s+/g, ' ').trim();
+    if(n && !seen.has(n.toLowerCase())){ seen.add(n.toLowerCase()); out.push(n.slice(0,120)); }
+  });
+  return out;
+}
+function newId(){ return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+async function copyText(t){
+  try{ await navigator.clipboard.writeText(t); return true; }catch(e){}
+  const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly',''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+  let ok = false; try{ ok = document.execCommand('copy'); }catch(e){} ta.remove(); return ok;
+}
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2200); }
+async function doCopy(){
+  const ta = $('#reportText'); const text = ta ? ta.value : reportText();
+  if(!text) return;
+  if(await copyText(text)) toast('Отчёт скопирован');
+  else { if(ta){ ta.focus(); ta.select(); } toast('Текст выделен — скопируйте его вручную'); }
+}
+
+/* ---------- render ---------- */
+function render(){
+  const gnav = $('#groups');
+  if(!state.ready){ return; }
+  gnav.innerHTML = state.groups.map(g => '<button class="chip" data-g="'+esc(g.id)+'" aria-pressed="'+(g.id===state.gid)+'">'+esc(g.name)+'</button>').join('') +
+    '<button class="chip add" id="addGroup">+ Группа</button>';
+
+  const app = $('#app'), bar = $('#bar');
+  const g = curGroup();
+  if(!g){
+    bar.hidden = true;
+    app.innerHTML = '<div class="card empty"><p>Пока нет ни одной группы. Создайте группу и вставьте список учеников — один раз.</p><button class="btn primary" id="emptyAdd">Создать группу</button></div>';
+    return;
+  }
+  const s = curSession();
+  const { students, present, extras } = rollFor(g, s);
+  const all = students.concat(extras);
+  const nPres = students.filter(n => present.has(n)).length + extras.length;
+  const d = parseIso(state.date);
+  const isToday = state.date === isoToday();
+
+  // keep report textarea focus/edits from being wiped while typing
+  const active = document.activeElement && document.activeElement.id;
+
+  app.innerHTML =
+  '<div class="cols">' +
+    '<div class="card">' +
+      '<div class="day">' +
+        '<div class="dayrow">' +
+          '<button class="nav" id="prev" aria-label="Предыдущий день"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4L6 9l5 5"/></svg></button>' +
+          '<label class="datepick"><div class="d1">'+esc(fmtLong.format(d))+'</div><div class="d2">'+esc(fmtWd.format(d))+'</div><input type="date" id="dateInput" value="'+state.date+'" aria-label="Дата занятия"></label>' +
+          '<button class="nav" id="next" aria-label="Следующий день"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4l5 5-5 5"/></svg></button>' +
+        '</div>' +
+        (isToday ? '' : '<button class="today" id="today">Вернуться к сегодняшнему дню</button>') +
+        '<div class="groupname"><h2>'+esc(g.name)+'</h2><button class="link" id="editGroup">Изменить список</button></div>' +
+        (all.length ?
+          '<div class="tally"><div class="count">'+nPres+' <small>из '+students.length+'</small></div><div class="dots" aria-hidden="true">'+all.map(n => '<span class="'+(present.has(n)?'on':'')+'"></span>').join('')+'</div></div>' +
+          '<div class="bulk"><button class="btn" id="allIn">Отметить всех</button>'+(nPres ? '<button class="btn" id="allOut">Снять отметки</button>' : '')+'</div>'
+        : '') +
+      '</div>' +
+      (all.length ?
+        '<ul class="roll">' + all.map((n,i) =>
+          '<li><button class="row" role="checkbox" aria-checked="'+present.has(n)+'" data-n="'+esc(n)+'"><span class="num">'+(i+1)+'</span><span class="box">'+ICON_CHECK+'</span><span class="nm">'+esc(n)+'</span>'+(students.includes(n)?'':'<span class="tag">не в списке</span>')+'</button></li>').join('') + '</ul>'
+      : '<div class="empty"><p>В группе пока нет учеников.</p><button class="btn primary" id="emptyEdit">Добавить учеников</button></div>') +
+    '</div>' +
+    '<div class="side">' +
+      '<div class="card report">' +
+        '<h3>Отчёт</h3>' +
+        '<textarea id="reportText" aria-label="Текст отчёта">'+esc(reportText())+'</textarea>' +
+        '<div class="opts">' +
+          '<label><input type="checkbox" data-p="groupName"'+(prefs.groupName?' checked':'')+'>Название группы</label>' +
+          '<label><input type="checkbox" data-p="counts"'+(prefs.counts?' checked':'')+'>Количество</label>' +
+          '<label><input type="checkbox" data-p="lines"'+(prefs.lines?' checked':'')+'>Списком</label>' +
+        '</div>' +
+        '<div class="actions"><button class="btn primary" id="copy">Скопировать отчёт</button>' + (navigator.share ? '<button class="btn" id="share">Отправить</button>' : '') + '</div>' +
+      '</div>' +
+      historyHtml(g) +
+    '</div>' +
+  '</div>';
+
+  bar.hidden = false;
+  $('#barMeta').textContent = dmy(state.date) + ' · ' + nPres + '/' + students.length;
+  if(active === 'reportText'){ const ta = $('#reportText'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function historyHtml(g){
+  const map = state.sessions[g.id] || {};
+  const dates = Object.keys(map).sort().reverse();
+  const total = (g.students||[]).length;
+  return '<div class="card hist"><h3>Прошлые занятия</h3>' +
+    (dates.length ? '<ul>' + dates.map(dt => '<li><button data-d="'+dt+'" aria-current="'+(dt===state.date)+'"><span>'+dmy(dt)+'</span><span>'+map[dt].present.length+' из '+total+'</span></button></li>').join('') + '</ul>'
+      : '<p class="none">Здесь появятся даты, в которые вы отмечали учеников.</p>') + '</div>';
+}
+
+/* ---------- group dialog ---------- */
+const dlg = $('#dlg');
+function openEditor(g){
+  state.editing = g ? g.id : null;
+  $('#dlgTitle').textContent = g ? 'Группа и список учеников' : 'Новая группа';
+  $('#fName').value = g ? g.name : '';
+  $('#fStudents').value = g ? (g.students||[]).join('\n') : '';
+  $('#fDelete').hidden = !g;
+  if(typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open','');
+  setTimeout(() => (g ? $('#fStudents') : $('#fName')).focus(), 50);
+}
+function closeEditor(){ if(dlg.open) dlg.close(); state.editing = null; }
+$('#fCancel').onclick = closeEditor;
+$('#fSort').onclick = () => { const l = parseList($('#fStudents').value); l.sort((a,b) => a.localeCompare(b,'ru')); $('#fStudents').value = l.join('\n'); };
+$('#dlgForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#fName').value.trim(); if(!name){ $('#fName').focus(); return; }
+  const students = parseList($('#fStudents').value);
+  const old = state.groups.find(x => x.id === state.editing);
+  const id = old ? old.id : newId();
+  const body = { name: name.slice(0,80), students, createdAt: old ? (old.createdAt||Date.now()) : Date.now() };
+  const g = Object.assign({id}, body);
+  if(old) state.groups[state.groups.indexOf(old)] = g; else state.groups.push(g);
+  queueWrite('groups/' + id, body, 0);
+  closeEditor(); selectGroup(id);
+  toast(old ? 'Список сохранён' : 'Группа создана');
+});
+$('#fDelete').onclick = async () => {
+  const g = state.groups.find(x => x.id === state.editing); if(!g) return;
+  if(!confirm('Удалить группу «' + g.name + '» вместе со всеми отметками посещаемости?')) return;
+  closeEditor();
+  state.groups = state.groups.filter(x => x.id !== g.id);
+  if(state.gid === g.id){ state.gid = state.groups.length ? state.groups[0].id : null; lsSet('att-group', state.gid); watchSessions(); }
+  render();
+  try{ const ids = await backend.listSessions(g.id); ids.forEach(d => queueWrite('groups/'+g.id+'/sessions/'+d, null, 0)); }catch(e){}
+  queueWrite('groups/' + g.id, null, 0);
+  toast('Группа удалена');
+};
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if(!t) return;
+  if(t.dataset.g){ selectGroup(t.dataset.g); return; }
+  if(t.dataset.n != null && t.classList.contains('row')){ toggle(t.dataset.n); return; }
+  if(t.dataset.d){ setDate(t.dataset.d); window.scrollTo({top:0, behavior:'smooth'}); return; }
+  switch(t.id){
+    case 'addGroup': case 'emptyAdd': openEditor(null); break;
+    case 'editGroup': case 'emptyEdit': openEditor(curGroup()); break;
+    case 'prev': setDate(shift(state.date,-1)); break;
+    case 'next': setDate(shift(state.date,1)); break;
+    case 'today': setDate(isoToday()); break;
+    case 'allIn': { const g = curGroup(); const s = curSession(); const extras = s ? s.present.filter(n => !(g.students||[]).includes(n)) : []; setPresent((g.students||[]).concat(extras)); break; }
+    case 'allOut': setPresent([]); break;
+    case 'copy': case 'barCopy': doCopy(); break;
+    case 'signIn': signIn(); break;
+    case 'signOut': if(confirm('Выйти из аккаунта на этом устройстве?')) fb.auth.signOut(fb.auth.getAuth()); break;
+    case 'share': { const ta = $('#reportText'); navigator.share({ text: ta ? ta.value : reportText() }).catch(() => {}); break; }
+  }
+});
+document.addEventListener('change', e => {
+  if(e.target.id === 'dateInput') setDate(e.target.value);
+  if(e.target.dataset && e.target.dataset.p){ prefs[e.target.dataset.p] = e.target.checked; lsSet('att-prefs', prefs); render(); }
+});
+document.addEventListener('click', e => {
+  if(e.target.id === 'dateInput' && typeof e.target.showPicker === 'function'){ try{ e.target.showPicker(); }catch(_){} }
+}, true);
+
+start();
+})();
+</script>
+</body>
+</html>
