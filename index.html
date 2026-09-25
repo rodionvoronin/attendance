@@ -153,6 +153,7 @@ dialog::backdrop{background:rgba(10,15,25,.45)}
 .auth p{margin:0 0 20px;color:var(--muted)}
 .auth .btn.primary{padding:12px 18px;font-size:1rem}
 .auth .err{color:var(--absent);font-size:.9rem;margin:14px 0 0}
+.auth form{display:grid;gap:12px;text-align:left}
 .foot-note{margin-top:20px;font-size:.85rem;color:var(--muted);text-align:center}
 .foot-note button{border:0;background:none;color:var(--accent);font-size:inherit;padding:2px 4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -232,10 +233,10 @@ const pending = new Map(), timers = new Map(), inflight = new Set();
 const FB_VER = "10.12.2";
 let fb = null; // loaded firebase modules
 let unacked = 0;
-function makeFirebaseBackend(db, uid){
+function makeFirebaseBackend(db, space){
   const F = fb.fs;
-  const ref = path => F.doc(db, "users/" + uid + "/" + path);
-  const col = path => F.collection(db, "users/" + uid + "/" + path);
+  const ref = path => F.doc(db, "spaces/" + space + "/" + path);
+  const col = path => F.collection(db, "spaces/" + space + "/" + path);
   const ack = p => { unacked++; p.then(() => { unacked--; if(!unacked && !pending.size && !inflight.size) idleStatus(); }, err => { unacked--; failStatus(err); }); };
   return {
     kind:"firebase",
@@ -337,27 +338,43 @@ function detach(){
   unsubGroups = unsubSessions = null; subGid = null; backend = null;
   state.groups = []; state.sessions = {}; state.ready = false;
 }
-function showSignIn(errText){
+/* ---------- access code ---------- */
+// The code itself never leaves the device: data lives under spaces/<sha-256 of the code>.
+const CODE_MIN = 8;
+let fsDb = null;
+function showCodeEntry(errText){
   $('#groups').innerHTML = ''; $('#bar').hidden = true; $('#footNote').textContent = '';
-  setSync('local', 'Не выполнен вход');
-  $('#app').innerHTML = '<div class="card auth"><h1>Учёт посещаемости</h1><p>Войдите через Google, чтобы группы и отметки были одинаковыми на телефоне и компьютере.</p><button class="btn primary" id="signIn">Войти через Google</button>' + (errText ? '<p class="err">' + esc(errText) + '</p>' : '') + '</div>';
+  setSync('local', 'Код доступа не введён');
+  $('#app').innerHTML = '<div class="card auth"><h1>Учёт посещаемости</h1><p>Введите код доступа — одинаковый на телефоне и компьютере, тогда группы и отметки будут общими. Первый раз просто придумайте код и запомните его.</p>' +
+    '<form id="codeForm"><label class="field"><span>Код доступа</span><input id="codeInput" type="password" minlength="' + CODE_MIN + '" required autocomplete="current-password" placeholder="Например, три-четыре слова через пробел"><small>Не короче ' + CODE_MIN + ' символов. Кто знает код, тот видит и меняет данные.</small></label>' +
+    '<button class="btn primary" type="submit">Продолжить</button></form>' + (errText ? '<p class="err">' + esc(errText) + '</p>' : '') + '</div>';
+  setTimeout(() => { const i = $('#codeInput'); if(i) i.focus(); }, 50);
 }
-async function signIn(){
-  const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } = fb.auth;
-  const auth = getAuth(); const provider = new GoogleAuthProvider();
-  try{ await signInWithPopup(auth, provider); }
-  catch(e){
-    if(e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment' || e.code === 'auth/cancelled-popup-request')){
-      try{ await signInWithRedirect(auth, provider); return; }catch(e2){ e = e2; }
-    }
-    if(e && e.code === 'auth/popup-closed-by-user') return;
-    showSignIn(e && e.code === 'auth/unauthorized-domain' ? 'Этот адрес не добавлен в Firebase → Authentication → Settings → Authorized domains.' : 'Не удалось войти (' + ((e && e.code) || 'ошибка') + ').');
-  }
+async function spaceFor(code){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('attendance:' + code.trim()));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
-function renderFoot(user){
+async function enterCode(code){
+  if(code.trim().length < CODE_MIN){ showCodeEntry('Код слишком короткий — нужно не меньше ' + CODE_MIN + ' символов.'); return; }
+  const space = await spaceFor(code);
+  lsSet('att-space', space);
+  openSpace(space);
+}
+function openSpace(space){
+  detach();
+  $('#app').innerHTML = '<div class="loading">Загрузка данных…</div>';
+  renderFoot(true);
+  attach(makeFirebaseBackend(fsDb, space));
+}
+function leaveSpace(){
+  flushAll(); detach();
+  try{ localStorage.removeItem('att-space'); }catch(e){}
+  showCodeEntry();
+}
+function renderFoot(synced){
   const f = $('#footNote');
-  if(!user){ f.innerHTML = 'Синхронизация не настроена: данные хранятся только на этом устройстве. Как включить — в README репозитория.'; return; }
-  f.innerHTML = 'Вы вошли как ' + esc(user.email || user.displayName || 'пользователь') + ' <button id="signOut">Выйти</button>';
+  if(!synced){ f.innerHTML = 'Синхронизация не настроена: данные хранятся только на этом устройстве. Как включить — в README репозитория.'; return; }
+  f.innerHTML = 'Данные общие для всех устройств с этим кодом доступа. <button id="signOut">Сменить код</button>';
 }
 
 async function start(){
@@ -365,8 +382,8 @@ async function start(){
   if(!cfgOk){ attach(makeLocalBackend()); renderFoot(null); return; }
   try{
     const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
-    const [app, auth, fs] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')]);
-    fb = { app, auth, fs };
+    const [app, fs] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-firestore.js')]);
+    fb = { app, fs };
   }catch(e){
     console.warn(e); $('#app').innerHTML = '<div class="card empty"><p>Не удалось загрузить Firebase. Проверьте интернет и обновите страницу.</p></div>'; return;
   }
@@ -374,15 +391,9 @@ async function start(){
   let db;
   try{ db = fb.fs.initializeFirestore(fbApp, { localCache: fb.fs.persistentLocalCache({ tabManager: fb.fs.persistentMultipleTabManager() }) }); }
   catch(e){ db = fb.fs.getFirestore(fbApp); }
-  const auth = fb.auth.getAuth(fbApp);
-  fb.auth.getRedirectResult(auth).catch(e => showSignIn('Не удалось войти (' + (e.code || 'ошибка') + ').'));
-  fb.auth.onAuthStateChanged(auth, user => {
-    detach();
-    if(!user){ showSignIn(); return; }
-    $('#app').innerHTML = '<div class="loading">Загрузка данных…</div>';
-    renderFoot(user);
-    attach(makeFirebaseBackend(db, user.uid));
-  });
+  fsDb = db;
+  const space = lsGet('att-space', null);
+  if(space) openSpace(space); else showCodeEntry();
 }
 
 /* ---------- derived ---------- */
@@ -577,10 +588,14 @@ document.addEventListener('click', e => {
     case 'allIn': { const g = curGroup(); const s = curSession(); const extras = s ? s.present.filter(n => !(g.students||[]).includes(n)) : []; setPresent((g.students||[]).concat(extras)); break; }
     case 'allOut': setPresent([]); break;
     case 'copy': case 'barCopy': doCopy(); break;
-    case 'signIn': signIn(); break;
-    case 'signOut': if(confirm('Выйти из аккаунта на этом устройстве?')) fb.auth.signOut(fb.auth.getAuth()); break;
+    case 'signOut': if(confirm('Забыть код доступа на этом устройстве? Данные останутся — чтобы вернуться к ним, введите тот же код.')) leaveSpace(); break;
     case 'share': { const ta = $('#reportText'); navigator.share({ text: ta ? ta.value : reportText() }).catch(() => {}); break; }
   }
+});
+document.addEventListener('submit', e => {
+  if(e.target.id !== 'codeForm') return;
+  e.preventDefault();
+  enterCode($('#codeInput').value);
 });
 document.addEventListener('change', e => {
   if(e.target.id === 'dateInput') setDate(e.target.value);

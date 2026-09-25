@@ -1,9 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Каждый пользователь видит и меняет только свои группы и отметки
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    // Данные лежат в spaces/<SHA-256 от кода доступа>. Список пространств прочитать нельзя,
+    // поэтому к данным попадёт только тот, кто знает код.
+    match /spaces/{space}/groups/{rest=**} {
+      allow read, write: if space.matches('^[0-9a-f]{64}$');
     }
   }
 }
